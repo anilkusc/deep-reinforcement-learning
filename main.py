@@ -6,7 +6,7 @@ obs_space = env.observation_space.shape
 input_len = 1
 for space in obs_space:
     input_len *= space
-agent = Agent(input = input_len ,output=env.action_space.n,replay_memory=10000,memory_batch_size=2500)
+agent = Agent(input = input_len ,output=env.action_space.n,replay_memory=5000,memory_batch_size=1000)
 epochs = 100
 max_move = 1000
 for episode in range(epochs):
