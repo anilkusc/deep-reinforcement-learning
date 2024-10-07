@@ -5,7 +5,7 @@ from collections import deque
 import copy
 
 class Agent():
-    def __init__(self,input=32,output=4,learning_rate=0.001,gamma = 0.99,epsilon=1.0,replay_memory=10000,memory_batch_size=1000,sync_freq=500):
+    def __init__(self,input=32,output=4,learning_rate=0.001,gamma = 0.99,epsilon=1.0,replay_memory=10000,memory_batch_size=1000,sync_freq=5):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.input = input
         self.output = output
@@ -14,13 +14,11 @@ class Agent():
         self.memory_batch_size = memory_batch_size
         self.replay_memory = deque(maxlen=replay_memory)
         self.model = torch.nn.Sequential(
-        torch.nn.Linear(self.input, 256),
+        torch.nn.Linear(self.input, 128),
         torch.nn.ReLU(),
-        torch.nn.Linear(256, 256),
+        torch.nn.Linear(128, 128),
         torch.nn.ReLU(),
-        torch.nn.Linear(256, 256),
-        torch.nn.ReLU(),
-        torch.nn.Linear(256, self.output)
+        torch.nn.Linear(128, self.output)
     ).to(self.device)
         self.target_model = copy.deepcopy(self.model)
         self.target_model.load_state_dict(self.model.state_dict())
@@ -58,14 +56,15 @@ class Agent():
     def QPolicy(self,qval):
         qval_ = qval.cpu().data.numpy() 
         if (random.random()< self.epsilon):
-            action= np.random.randint(0,(self.output-1))
+            action= np.random.randint(0,self.output)
         else:
             action= np.argmax(qval_)
         return action
     
     def calculate_reward(self,reward,next_state,done):
+
         with torch.no_grad():
-            newQ = self.target_model(next_state)
+            newQ = self.model(next_state)
         maxQ = torch.max(newQ, dim=1)[0]
         # done 0 veya 1 olarak gelir. 0 ise etki etmez 1 ise Y=reward olur
         Y = reward + (self.gamma * maxQ * (1 - done))
@@ -79,13 +78,8 @@ class Agent():
     def load(self):
         self.model.load_state_dict(torch.load("model.pth", map_location=self.device))
     
-    def append_replay_memory(self,state_, action, reward, next_state_, done):
-        done_int = 0
-        if done:
-            done_int = 1
-        self.replay_memory.append((state_, action, reward, next_state_, done_int))
-    
     def update(self):
+        loss = 0
         if len(self.replay_memory) > self.memory_batch_size:
             minibatch = random.sample(self.replay_memory,self.memory_batch_size)
             state_batch = torch.stack([s1 for (s1, a, r, s2, d) in minibatch]).to(self.device)
@@ -93,12 +87,14 @@ class Agent():
             reward_batch = torch.Tensor([r for (s1,a,r,s2,d) in minibatch]).to(self.device)
             next_state_batch = torch.stack([s2 for (s1,a,r,s2,d) in minibatch]).to(self.device)
             done_batch = torch.Tensor([d for (s1,a,r,s2,d) in minibatch]).to(self.device)
-            qval = self.model(state_batch)
 
             Y = self.calculate_reward(reward_batch,next_state_batch,done_batch)
+            
+            qval = self.model(state_batch)
             X = qval.gather(dim=1,index=action_batch.long().unsqueeze(dim=1)).squeeze()
-            return self.train_backpropagation(X,Y)
-        #if self.sync_counter >= self.sync_freq:
-        #    self.target_model.load_state_dict(self.model.state_dict())
-        #    self.sync_counter = 0
-        #self.sync_counter += 1
+            loss = self.train_backpropagation(X,Y)
+        if self.sync_counter >= self.sync_freq:
+            self.target_model.load_state_dict(self.model.state_dict())
+            self.sync_counter = 0
+        self.sync_counter += 1
+        return loss
