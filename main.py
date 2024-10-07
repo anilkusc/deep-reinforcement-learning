@@ -8,9 +8,9 @@ input_len = 1
 for space in obs_space:
     input_len *= space
 input_len = env.observation_space.n    
-agent = Agent(input = input_len,output=env.action_space.n,replay_memory=5000,memory_batch_size=2000,learning_rate=0.0001)
-epochs = 2000
-max_move = 1000
+agent = Agent(input = input_len,output=env.action_space.n,replay_memory=1024,memory_batch_size=512)
+epochs = 10000
+max_move = 128
 total_loss = 0
 for episode in range(epochs):
     print("Episode: "+str(episode))
@@ -28,7 +28,7 @@ for episode in range(epochs):
         env.render()
         next_state, reward, terminated, truncated, _ = env.step(action)
         if terminated or truncated:
-            reward = 1000
+            reward = 10000
         if (reward == -100):
             #reward = -1
             terminated = True
