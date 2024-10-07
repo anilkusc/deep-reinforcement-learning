@@ -77,10 +77,10 @@ class Agent():
         return Y
     
     def save(self):
-        torch.save(self.model.state_dict(), "model.pth")
+        torch.save(self.model.state_dict(), "models/model.pth")
 
     def load(self):
-        self.model.load_state_dict(torch.load("model.pth", map_location=self.device))
+        self.model.load_state_dict(torch.load("models/model.pth", map_location=self.device))
     
     def update(self):
         loss = 0
