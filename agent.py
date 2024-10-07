@@ -14,11 +14,15 @@ class Agent():
         self.memory_batch_size = memory_batch_size
         self.replay_memory = deque(maxlen=replay_memory)
         self.model = torch.nn.Sequential(
-        torch.nn.Linear(self.input, 128),
+        torch.nn.Linear(self.input, 256),
         torch.nn.ReLU(),
-        torch.nn.Linear(128, 128),
+        torch.nn.Linear(256, 256),
         torch.nn.ReLU(),
-        torch.nn.Linear(128, self.output)
+        torch.nn.Linear(256, 256),
+        torch.nn.ReLU(),
+        torch.nn.Linear(256, 256),
+        torch.nn.ReLU(),
+        torch.nn.Linear(256, self.output)
     ).to(self.device)
         self.target_model = copy.deepcopy(self.model)
         self.target_model.load_state_dict(self.model.state_dict())
