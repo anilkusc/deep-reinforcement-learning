@@ -64,7 +64,7 @@ class Agent():
     def calculate_reward(self,reward,next_state,done):
 
         with torch.no_grad():
-            newQ = self.model(next_state)
+            newQ = self.target_model(next_state)
         maxQ = torch.max(newQ, dim=1)[0]
         # done 0 veya 1 olarak gelir. 0 ise etki etmez 1 ise Y=reward olur
         Y = reward + (self.gamma * maxQ * (1 - done))
