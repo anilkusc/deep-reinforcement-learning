@@ -14,15 +14,11 @@ class Agent():
         self.memory_batch_size = memory_batch_size
         self.replay_memory = deque(maxlen=replay_memory)
         self.model = torch.nn.Sequential(
-        torch.nn.Linear(self.input, 256),
+        torch.nn.Linear(self.input, 258),
         torch.nn.ReLU(),
-        torch.nn.Linear(256, 256),
+        torch.nn.Linear(258, 258),
         torch.nn.ReLU(),
-        torch.nn.Linear(256, 256),
-        torch.nn.ReLU(),
-        torch.nn.Linear(256, 256),
-        torch.nn.ReLU(),
-        torch.nn.Linear(256, self.output)
+        torch.nn.Linear(258, self.output)
     ).to(self.device)
         self.target_model = copy.deepcopy(self.model)
         self.target_model.load_state_dict(self.model.state_dict())
@@ -77,10 +73,10 @@ class Agent():
         return Y
     
     def save(self):
-        torch.save(self.model.state_dict(), "models/model.pth")
+        torch.save(self.model.state_dict(), "model.pth")
 
     def load(self):
-        self.model.load_state_dict(torch.load("models/model.pth", map_location=self.device))
+        self.model.load_state_dict(torch.load("model.pth", map_location=self.device))
     
     def update(self):
         loss = 0
