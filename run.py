@@ -2,7 +2,6 @@ import gymnasium as gym
 from agent import Agent
 
 test_env = gym.make("CarRacing-v2",render_mode="human",continuous=False)
-#test_env = gym.make('CliffWalking-v0',render_mode="human")
 obs_space = test_env.observation_space.shape
 input_len = 1
 for space in obs_space:
@@ -16,8 +15,7 @@ state_ = agent.preprocess_image(state)
 print("#################################")
 done=False
 while not done:
-    qval = agent.model(state_)
-    action = agent.QPolicy(qval)
+    action = agent.Action_Selector(state_)
     print("action: "+ str(action))
     test_env.render()
     next_state, reward, done, _, _ = test_env.step(action)
