@@ -22,7 +22,8 @@ class Agent():
         torch.nn.Linear(256, 256),
         torch.nn.LeakyReLU(),
         torch.nn.Linear(256, self.output),
-        torch.nn.Softmax(),).to(self.device)
+        torch.nn.Softmax()
+            ).to(self.device)
         self.target_model = copy.deepcopy(self.model)
         self.target_model.load_state_dict(self.model.state_dict())
         self.loss_fn = torch.nn.MSELoss()
@@ -83,7 +84,7 @@ class Agent():
         discount_batch_flipped = torch.flip(discount_batch, dims=(0,))
         discount_return =  discount_batch_flipped * rewards
         #normalize reward
-        discount_return /= discount_return.max()
+        #discount_return /= discount_return.max()
         return discount_return
 
     def calculate_reward(self,reward,next_state,done):

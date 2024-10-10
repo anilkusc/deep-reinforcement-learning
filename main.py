@@ -7,7 +7,7 @@ input_len = 1
 for space in obs_space:
     input_len *= space
 #input_len = env.observation_space.n    
-agent = Agent(input = input_len,output=env.action_space.n,replay_memory=4096,memory_batch_size=2048)
+agent = Agent(input = input_len,output=env.action_space.n,replay_memory=4096,memory_batch_size=2048,learning_rate=0.0000001)
 epochs = 100
 max_move = 1028
 total_loss = 0
@@ -34,5 +34,5 @@ for episode in range(epochs):
             print("done")
 
     loss = agent.REINFORCE()
-    print("total move: "+str(move) + " total_reward: "+ str(total_reward) + " epsilon : " + str(agent.epsilon))
+    print("total move: "+str(move) + " total_reward: "+ str(total_reward) + " loss : " + str(loss))
 agent.save()
