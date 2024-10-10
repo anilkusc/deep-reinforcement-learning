@@ -15,6 +15,8 @@ state_ = agent.preprocess_image(state)
 print("#################################")
 done=False
 while not done:
+    #qval =agent.model(state_)
+    #action = agent.QPolicy(qval)
     action = agent.Action_Selector(state_)
     print("action: "+ str(action))
     test_env.render()
