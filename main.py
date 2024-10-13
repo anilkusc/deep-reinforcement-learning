@@ -7,32 +7,31 @@ input_len = 1
 for space in obs_space:
     input_len *= space
 #input_len = env.observation_space.n    
-agent = Agent(input = input_len,output=env.action_space.n,replay_memory=4096,memory_batch_size=2048,learning_rate=0.0000001)
-epochs = 100
+agent = Agent(input = input_len,output=env.action_space.n,learning_rate=0.00001) #000005
+epochs = 1000
 max_move = 1028
 total_loss = 0
 for episode in range(epochs):
-    print("Episode: "+str(episode))
+    print("Episode: "+str(episode) + "/"+str(epochs))
     state, _ = env.reset()
     state_ = agent.preprocess_image(state)
     done = False
     move = 0
-    total_loss = 0
+    total_loss_actor = 0
+    total_loss_critic = 0
     total_reward = 0
-    agent.transitions = []
     while not done:
         move += 1
         action = agent.Action_Selector(state_)
-        #env.render()
+        env.render()
         next_state, reward, terminated, truncated, _ = env.step(action)
         done = terminated or truncated #or (move >= max_move)
         next_state_ = agent.preprocess_image(next_state)
         total_reward += reward
-        agent.transitions.append((state_,action,reward))
+        actor_loss,critic_loss = agent.update_actor_critic(reward,state_,action,next_state_,done)
+        total_loss_actor += actor_loss
+        total_loss_critic += critic_loss
         state_ = next_state_
-        if done:
-            print("done")
 
-    loss = agent.REINFORCE()
-    print("total move: "+str(move) + " total_reward: "+ str(total_reward) + " loss : " + str(loss))
+    print("total move: "+str(move) + " total reward: "+ str(int(total_reward)) + " actor loss : " + str(int(total_loss_actor.item()))+ " critic loss : " + str(int(total_loss_critic.item())))
 agent.save()
