@@ -8,8 +8,8 @@ input_len = 1
 for space in obs_space:
     input_len *= space
 #input_len = env.observation_space.n
-agent = Agent(input = input_len,output=env.action_space.n,learning_rate=0.001) #000005
-epochs = 500
+agent = Agent(input = input_len,output=env.action_space.n,learning_rate=0.0005) #000005
+epochs = 1000
 max_move = 9999
 reward_max = 0
 for episode in range(epochs):
