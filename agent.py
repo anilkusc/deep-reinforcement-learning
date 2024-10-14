@@ -24,13 +24,11 @@ class Agent():
 
     def model_constructor(self):
         self.model = torch.nn.Sequential(
-        torch.nn.Linear(self.input, 256),
+        torch.nn.Linear(self.input, 64),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(256, 256),
+        torch.nn.Linear(64, 32),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(256, 256),
-        torch.nn.LeakyReLU(),
-        torch.nn.Linear(256, self.output),
+        torch.nn.Linear(32, self.output),
         torch.nn.Softmax()
             ).to(self.device)
         self.loss_fn = torch.nn.MSELoss()
@@ -40,27 +38,23 @@ class Agent():
 
     def actor_constructor(self):
         self.actor = torch.nn.Sequential(
-        torch.nn.Linear(self.input, 256),
+        torch.nn.Linear(self.input, 64),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(256, 256),
+        torch.nn.Linear(64, 32),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(256, 256),
-        torch.nn.LeakyReLU(),
-        torch.nn.Linear(256, self.output),
-        torch.nn.Softmax()
+        torch.nn.Linear(32, self.output),
+        torch.nn.Softmax(dim=-1)
             ).to(self.device)
 
         self.optimizer_actor = torch.optim.Adam(self.actor.parameters(), lr=self.learning_rate)
 
     def critic_constructor(self):
         self.critic = torch.nn.Sequential(
-        torch.nn.Linear(self.input, 256),
+        torch.nn.Linear(self.input, 64),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(256, 256),
+        torch.nn.Linear(64, 32),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(256, 256),
-        torch.nn.LeakyReLU(),
-        torch.nn.Linear(256, 1) # çıkış 1 olmalı
+        torch.nn.Linear(32, 1)
             ).to(self.device)
         self.loss_fn_critic = torch.nn.MSELoss()
         self.optimizer_critic = torch.optim.Adam(self.critic.parameters(), lr=self.learning_rate)
@@ -93,7 +87,10 @@ class Agent():
         nn_input[state] = 1.0
         pytorch_input = torch.from_numpy(nn_input).float().to(self.device)
         return pytorch_input
-    
+
+    def state_to_flatten(self,state):
+        return torch.from_numpy(state).float().to(self.device)
+
     def preprocess_image(self,state):
         normalized = state.astype(np.float32) / 255.0
         flattened = normalized.flatten()
@@ -107,14 +104,10 @@ class Agent():
             action= np.argmax(qval_)
         return action
     
-    def Action_Selector(self,state_):
-        #action_probabilities = self.actor(state_)
-        policy_logits = self.actor(state_)
-        policy = torch.nn.functional.softmax(policy_logits, dim=-1)
-        action_probabilities_cpu = policy.cpu()
-        actions = np.arange(self.output)
-        action = np.random.choice(actions,p = action_probabilities_cpu.data.numpy())
-        return action
+    def action_dist(self,state_):
+        probs = self.actor(state_)
+        dist = torch.distributions.Categorical(probs=probs)
+        return dist 
     
     def discount_rewards(self,rewards):
         # it is going to create [N,N-1,... 3,2,1] array for multiplying it with gamma 
@@ -140,7 +133,7 @@ class Agent():
     def calculate_advantage(self,reward,state,next_state,done):
         value = self.critic(state)
         next_value = self.critic(next_state)
-        advantage = reward + ((1-(1 if done else 0))*self.gamma*next_value-value)
+        advantage = reward + ((1-done) * self.gamma * next_value) - value
         return advantage
     
     def save(self):
@@ -166,12 +159,11 @@ class Agent():
         return probability_batch,discounted_rewards
 
     def batch_state_replay_memory(self,minibatch):
-
-        state_batch = torch.stack([s1 for (s1, a, r, s2, d) in minibatch]).to(self.device)
-        action_batch = torch.Tensor([a for (s1,a,r,s2,d) in minibatch]).to(self.device)
-        reward_batch = torch.Tensor([r for (s1,a,r,s2,d) in minibatch]).to(self.device)
-        next_state_batch = torch.stack([s2 for (s1,a,r,s2,d) in minibatch]).to(self.device)
-        done_batch = torch.Tensor([d for (s1,a,r,s2,d) in minibatch]).to(self.device)
+        state_batch = torch.stack([s1 for (r, s1, a, s2, d) in minibatch]).to(self.device)
+        action_batch = torch.Tensor([a for (r, s1, a, s2, d) in minibatch]).to(self.device)
+        reward_batch = torch.Tensor([r for (r, s1, a, s2, d) in minibatch]).to(self.device)
+        next_state_batch = torch.stack([s2 for (r, s1, a, s2, d) in minibatch]).to(self.device)
+        done_batch = torch.Tensor([float(d) for (r, s1, a, s2, d) in minibatch]).to(self.device)
         return state_batch,action_batch,reward_batch,next_state_batch,done_batch
 
     def update(self):
@@ -191,36 +183,43 @@ class Agent():
         self.sync_counter += 1
         return loss
 
-    def train_backpropagation_actor(self,state,action,advantage):
-        advantage = advantage.detach()
+    def train_backpropagation_actor(self,dist,action,advantage):
+        
+        loss_actor = -dist.log_prob(action)*advantage.detach()
         self.optimizer_actor.zero_grad()
-        policy_logits = self.actor(state)
-        #policy = torch.nn.functional.softmax(policy_logits, dim=-1)
-        loss_actor = self.loss_fn_advantage(policy_logits,action,advantage)
         loss_actor.backward()
         self.optimizer_actor.step()
         return loss_actor
 
-    def train_backpropagation_critic(self,state,advantage):
-        self.optimizer_critic.zero_grad()
-        value = self.critic(state)
-        loss_critic = self.loss_fn_critic(value,advantage+value.detach())
-        loss_critic.backward()
-        self.optimizer_critic.step()
+    def train_backpropagation_critic(self, advantage):
+        loss_critic = advantage.pow(2).mean()
+        self.optimizer_critic.zero_grad()  # Zero the gradients
+        loss_critic.backward()  # Compute gradients
+        self.optimizer_critic.step()  # Update the critic network
+
         return loss_critic
     
-    def loss_fn_advantage(self,policy_logits,action,advantage):
+    def loss_fn_advantage(self, policy_logits, action, advantage):
         log_probs = torch.nn.functional.log_softmax(policy_logits, dim=-1)
-        action_log_prob = log_probs[action]
-        actor_loss = -action_log_prob * advantage
-        return actor_loss
-        #return -torch.mean(log_probs * advantage).to(self.device)
-        #return -torch.mean((torch.log(policy)) * advantage).to(self.device)
+        
+        action = action.long() 
+        action_log_probs = log_probs.gather(1, action.unsqueeze(1)).squeeze(1) 
+        
+        actor_loss = -action_log_probs * advantage
+        
+        return actor_loss.sum()
     
-    def update_actor_critic(self,reward,state,action,next_state,done):
+    def update_actor_critic(self,reward,state,dist,action,next_state,done):
         advantage = self.calculate_advantage(reward,state,next_state,done)
-        actor_loss = self.train_backpropagation_actor(state,action,advantage)
-        critic_loss = self.train_backpropagation_critic(state,advantage)
+        actor_loss = self.train_backpropagation_actor(dist,action,advantage)
+        critic_loss = self.train_backpropagation_critic(advantage)
+        return actor_loss, critic_loss
+
+    def update_actor_critic_trajectory(self,trajectories):
+        state_batch,action_batch,reward_batch,next_state_batch,done_batch = self.batch_state_replay_memory(trajectories)
+        advantage = self.calculate_advantage(reward_batch,state_batch,next_state_batch,done_batch)
+        actor_loss = self.train_backpropagation_actor(state_batch,action_batch,advantage)
+        critic_loss = self.train_backpropagation_critic(state_batch,advantage)
         return actor_loss, critic_loss
 
     def REINFORCE(self):
