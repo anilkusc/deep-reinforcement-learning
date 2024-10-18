@@ -5,16 +5,18 @@ from collections import deque
 import copy
 
 class Agent():
-    def __init__(self,input=32,output=4,learning_rate=0.001,gamma = 0.99,epsilon=1.0,replay_memory=10000,memory_batch_size=1000,sync_freq=5):
+    def __init__(self,input=32,output=4,learning_rate=0.001,tau=0.95,gamma = 0.99,epsilon=1.0,replay_memory=10000,memory_batch_size=1000,sync_freq=5):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.input = input
         self.output = output
         self.learning_rate = learning_rate
         self.sync_freq = sync_freq
         self.sync_counter = 0
+        self.tau = tau
         self.memory_batch_size = memory_batch_size
         self.replay_memory = deque(maxlen=replay_memory)
         self.transitions = []
+        self.old_dist = None
         #self.model_constructor()
         self.actor_constructor()
         self.critic_constructor()
@@ -38,11 +40,13 @@ class Agent():
 
     def actor_constructor(self):
         self.actor = torch.nn.Sequential(
-        torch.nn.Linear(self.input, 64),
+        torch.nn.Linear(self.input, 128),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(64, 32),
+        torch.nn.Linear(128, 128),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(32, self.output),
+        torch.nn.Linear(128, 128),
+        torch.nn.LeakyReLU(),
+        torch.nn.Linear(128, self.output),
         torch.nn.Softmax(dim=-1)
             ).to(self.device)
 
@@ -50,15 +54,16 @@ class Agent():
 
     def critic_constructor(self):
         self.critic = torch.nn.Sequential(
-        torch.nn.Linear(self.input, 64),
-        torch.nn.LeakyReLU(),
-        torch.nn.Linear(64, 32),
-        torch.nn.LeakyReLU(),
-        torch.nn.Linear(32, 1)
+        torch.nn.Linear(self.input, 128),
+        torch.nn.Tanh(),
+        torch.nn.Linear(128, 128),
+        torch.nn.Tanh(),
+        torch.nn.Linear(128, 128),
+        torch.nn.Tanh(),
+        torch.nn.Linear(128, 1)
             ).to(self.device)
         self.loss_fn_critic = torch.nn.MSELoss()
         self.optimizer_critic = torch.optim.Adam(self.critic.parameters(), lr=self.learning_rate)
-
 
     def train_backpropagation(self,X,Y):
         X, Y = X.to(self.device), Y.to(self.device)
@@ -134,7 +139,8 @@ class Agent():
         value = self.critic(state)
         next_value = self.critic(next_state)
         advantage = reward + ((1-done) * self.gamma * next_value) - value
-        return advantage
+        gae = advantage + self.gamma*self.tau*(1-done)
+        return gae
     
     def save(self):
         torch.save(self.actor.state_dict(), "model_ac.pth")
@@ -184,11 +190,19 @@ class Agent():
         return loss
 
     def train_backpropagation_actor(self,dist,action,advantage):
-        
-        loss_actor = -dist.log_prob(action)*advantage.detach()
+
+        ratio = torch.exp(dist.log_prob(action) - self.old_dist.log_prob(action).detach())
+    
+        # Clipped surrogate objective
+        surr1 = ratio * advantage.detach()
+        surr2 = torch.clamp(ratio, 1-self.epsilon, 1+self.epsilon) * advantage.detach()
+    
+        loss_actor = -torch.min(surr1, surr2).mean()
+        #loss_actor = -dist.log_prob(action)*advantage.detach()
         self.optimizer_actor.zero_grad()
         loss_actor.backward()
         self.optimizer_actor.step()
+        self.old_dist = dist
         return loss_actor
 
     def train_backpropagation_critic(self, advantage):
@@ -210,6 +224,7 @@ class Agent():
         return actor_loss.sum()
     
     def update_actor_critic(self,reward,state,dist,action,next_state,done):
+        
         advantage = self.calculate_advantage(reward,state,next_state,done)
         actor_loss = self.train_backpropagation_actor(dist,action,advantage)
         critic_loss = self.train_backpropagation_critic(advantage)
