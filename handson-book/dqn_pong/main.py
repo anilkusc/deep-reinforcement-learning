@@ -1,4 +1,4 @@
-#from agent import Agent
+from agent import Agent
 from wrappers import make_env
 
 env = make_env("ALE/Pong-v5",render_mode="human")
@@ -7,7 +7,7 @@ input_len = 1
 for space in obs_space:
     input_len *= space
 #input_len = env.observation_space.n
-#agent = Agent(input = input_len,output=env.action_space.n,learning_rate=0.01)
+agent = Agent(input = obs_space,output=env.action_space.n,learning_rate=0.01)
 epochs = 5000
 max_move = 9999
 reward_max = 0
@@ -20,7 +20,7 @@ for i,episode in enumerate(range(epochs)):
     total_reward = 0
     while not done:
         move += 1
-        action = 2
+        action = agent.action_selector(state)
         env.render()
         next_state, reward, terminated, truncated, _ = env.step(action)
         done = terminated or truncated
