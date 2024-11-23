@@ -1,27 +1,22 @@
 from agent import Agent
 from wrappers import make_env
 
-env = make_env("ALE/Pong-v5",render_mode="human")
-obs_space = env.observation_space.shape
-input_len = 1
-for space in obs_space:
-    input_len *= space
-#input_len = env.observation_space.n
-agent = Agent(input = obs_space,output=env.action_space.n,learning_rate=0.01)
+env = make_env("ALE/Pong-v5",render_mode="rgb_array")
+agent = Agent(input = env.observation_space.shape,output=env.action_space.n,learning_rate=0.01,tensorboard=True)
 epochs = 5000
-max_move = 9999
-reward_max = 0
 all_episodes = []
-for i,episode in enumerate(range(epochs)):
+for episode in range(epochs):
     print("Episode: "+str(episode+1) + "/"+str(epochs))
     state, _ = env.reset()
     done = False
     move = 0
-    total_reward = 0
     while not done:
         move += 1
         action = agent.action_selector(state)
         env.render()
         next_state, reward, terminated, truncated, _ = env.step(action)
         done = terminated or truncated
+        agent.replay_memory.append((reward,state,action, next_state,done))
         state = next_state
+    print("Total move: "+str(move))
+    agent.update()

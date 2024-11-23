@@ -3,9 +3,9 @@ import numpy as np
 import ale_py
 
 
-class ConvertToGrayscale(gym.ObservationWrapper):
+class CompatibleWithPytorchConv(gym.ObservationWrapper):
     def __init__(self, env):
-        super(ConvertToGrayscale, self).__init__(env)
+        super(CompatibleWithPytorchConv, self).__init__(env)
         old_shape = self.observation_space.shape
         new_shape = (old_shape[-1], old_shape[0], old_shape[1])
         self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=new_shape, dtype=np.float32)
@@ -21,5 +21,5 @@ class ConvertToGrayscale(gym.ObservationWrapper):
 def make_env(env_name,render_mode=None):
     gym.register_envs(ale_py)
     env = gym.make(env_name,render_mode=render_mode)
-    env = ConvertToGrayscale(env)
+    env = CompatibleWithPytorchConv(env)
     return env
