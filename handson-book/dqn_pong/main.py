@@ -18,5 +18,7 @@ for episode in range(epochs):
         done = terminated or truncated
         agent.replay_memory.append((reward,state,action, next_state,done))
         state = next_state
-    print("Total move: "+str(move))
+    if agent.tensorboard:
+        agent.writer.add_scalar("total_move", move, episode)
+        agent.writer.add_scalar("epsilon", agent.epsilon, episode)
     agent.update()

@@ -12,14 +12,24 @@ class CompatibleWithPytorchConv(gym.ObservationWrapper):
 
     def observation(self, obs):
         return np.moveaxis(obs, 2, 0)
+
         #weights = np.array([0.2989, 0.5870, 0.1140])
         #grayscale_image = np.dot(obs, weights).astype(np.uint8)
         #return grayscale_image
         #normalized = np.round(grayscale_image / 255.0, 3)
         #return normalized.flatten()
 
+class NormalizeImageData(gym.ObservationWrapper):
+    def __init__(self, env):
+        super(NormalizeImageData, self).__init__(env)
+
+    def observation(self, obs):
+        return np.round(obs / 255.0, 3)
+
+
 def make_env(env_name,render_mode=None):
     gym.register_envs(ale_py)
     env = gym.make(env_name,render_mode=render_mode)
     env = CompatibleWithPytorchConv(env)
+    env = NormalizeImageData(env)
     return env

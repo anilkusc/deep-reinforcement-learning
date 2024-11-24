@@ -31,7 +31,7 @@ class Agent(nn.Module):
             ReLU(),
             Conv2d(64, 64, kernel_size=3, stride=1),
             ReLU()
-        )
+        ).to(self.device)
         conv_out_size = self._get_conv_out()
         self.model = Sequential(
             Linear(conv_out_size, 512),
@@ -52,9 +52,12 @@ class Agent(nn.Module):
     def train(self,batches):
         self.optimizer.zero_grad()
         state_batch,action_batch,reward_batch,next_state_batch,done_batch = batches
-        actual_Q = self.model(state_batch).gather(1, action_batch.unsqueeze(-1)).squeeze(-1)
+        actual_Q = self.forward(state_batch)
+        unsq_act_batch = action_batch.unsqueeze(-1)
+        actual_Q = actual_Q.gather(1,unsq_act_batch )
+        actual_Q = actual_Q.squeeze(-1)
         with torch.no_grad():
-            next_state_values = self.model(next_state_batch).max(1)[0]
+            next_state_values = self.forward(next_state_batch).max(1)[0]
             next_state_values[done_batch] = 0.0
             next_state_values = next_state_values.detach()
         expected_Q = reward_batch + self.gamma * next_state_values
@@ -64,16 +67,12 @@ class Agent(nn.Module):
         self.optimizer.step()
         if self.tensorboard:
             self.writer.add_scalar("loss", loss.item(), self.episode)
-    
-    def monitor(self,reward,loss,i):
-        self.writer.add_scalar("loss", loss.item(), i)
-        self.writer.add_scalar("reward", reward, i)
 
     def action_selector(self,state):
-        state_ = torch.FloatTensor([state])
         if (random.random() < self.epsilon):
             action= np.random.randint(0,self.output)
         else:
+            state_ = torch.FloatTensor([state])
             QValues_ = self.forward(state_)
             QValues = QValues_.data.numpy()[0]
             action = np.argmax(QValues)
@@ -89,9 +88,10 @@ class Agent(nn.Module):
         if batches != None:
             self.train(batches)
         self.save()
-
+    
     def forward(self, x):
-        conv_out = self.conv(x).view(x.size()[0], -1)
+        conv_out = self.conv(x)
+        conv_out = conv_out.view(x.size()[0], -1)
         return self.model(conv_out)
 
     def epsilon_decay(self):
@@ -105,15 +105,14 @@ class Agent(nn.Module):
             minibatch = random.sample(self.replay_memory, self.memory_batch_size)
 
             # Convert numpy arrays to tensors before stacking
-            state_batch = torch.stack([torch.from_numpy(s1) for (r, s1, a, s2, d) in minibatch]).to(self.device)
-            action_batch = torch.tensor([a for (r, s1, a, s2, d) in minibatch], dtype=torch.int).to(self.device)
+            state_batch = torch.stack([torch.from_numpy(s1).float() for (r, s1, a, s2, d) in minibatch]).to(self.device)
+            action_batch = torch.tensor([a for (r, s1, a, s2, d) in minibatch], dtype=torch.long).to(self.device)
             reward_batch = torch.tensor([r for (r, s1, a, s2, d) in minibatch], dtype=torch.float).to(self.device)
-            next_state_batch = torch.stack([torch.from_numpy(s2) for (r, s1, a, s2, d) in minibatch]).to(self.device)
+            next_state_batch = torch.stack([torch.from_numpy(s2).float() for (r, s1, a, s2, d) in minibatch]).to(self.device)
             done_batch = torch.tensor([d for (r, s1, a, s2, d) in minibatch], dtype=torch.bool).to(self.device)
 
             return state_batch, action_batch, reward_batch, next_state_batch, done_batch
         return None
-
 
     def save(self):
         torch.save(self.model.state_dict(), "model_ac.pth")
