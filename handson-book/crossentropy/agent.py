@@ -3,7 +3,7 @@ from torch.nn import Sequential,Linear,ReLU,CrossEntropyLoss,Softmax
 from tensorboardX import SummaryWriter
 import numpy as np
 class Agent():
-    def __init__(self,input=32,output=4,learning_rate=0.001,gamma = 0.99,epsilon=1.0,replay_memory=10000):
+    def __init__(self,input=32,output=4,learning_rate=0.001,gamma = 0.99,epsilon=1.0):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.input = input
         self.output = output
@@ -26,6 +26,8 @@ class Agent():
         self.softmax = Softmax(dim=1)
 
     def train(self,x,y):
+        x = x.to(self.device)
+        y = y.to(self.device)
         self.optimizer.zero_grad()
         out = self.model(x)
         loss = self.lossfunc(out,y)
@@ -44,10 +46,10 @@ class Agent():
         self.model.load_state_dict(torch.load("model_ac.pth", map_location=self.device))
 
     def action_selector(self,state):
-        state_ = torch.FloatTensor([state])
+        state_ = torch.FloatTensor([state]).to(self.device)
         probs = self.softmax(self.model(state_))
         #convert tensor to numpy
-        dist = probs.data.numpy()[0]
+        dist = probs.cpu().data.numpy()[0]
         action = np.random.choice(len(dist), p=dist)
         return action
     

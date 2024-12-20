@@ -36,5 +36,6 @@ for i,episode in enumerate(range(epochs)):
         loss = agent.train(s,a)
         agent.monitor(total_reward,loss,((i)/100))
         all_episodes = []
+        agent.save()
 agent.save()
 agent.writer.close()
