@@ -10,7 +10,7 @@ agent = Agent(
     conv_hidden=16,
     max_epsilon=0.1
 )
-agent.load(model_name="model_test_4.pth")
+agent.load(model_name="model_ac.pth")
 print(agent.model)
 
 state, _ = env.reset(seed=123)

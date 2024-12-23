@@ -10,11 +10,21 @@ class CompatibleWithPytorchConv(gym.ObservationWrapper):
     def __init__(self, env):
         super(CompatibleWithPytorchConv, self).__init__(env)
         old_shape = self.observation_space.shape
-        new_shape = (old_shape[-1], old_shape[0], old_shape[1])
+        new_shape = (old_shape[-1], old_shape[1], old_shape[0])
         self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=new_shape, dtype=np.float32)
 
     def observation(self, obs):
         return np.moveaxis(obs, 2, 0)
+
+class CompatibleWithPytorchConv2(gym.ObservationWrapper):
+    def __init__(self, env):
+        super(CompatibleWithPytorchConv2, self).__init__(env)
+        # Şekil değişikliği gerekmediğinden aynı şekli koruyoruz.
+        self.observation_space = env.observation_space
+
+    def observation(self, obs):
+        return obs
+
 
 class NormalizeImageData(gym.ObservationWrapper):
     def __init__(self, env):
@@ -23,6 +33,19 @@ class NormalizeImageData(gym.ObservationWrapper):
     def observation(self, obs):
         return np.round(obs / 255.0, 3)
 
+class SkipFrame(gym.Wrapper):
+    def __init__(self, env, skip=3):
+        super().__init__(env)
+        self._skip = skip
+
+    def step(self, action):
+        total_reward = 0.0
+        for _ in range(self._skip):
+            state, reward, terminated, truncated, info = self.env.step(action)
+            total_reward += reward
+            if terminated or truncated:
+                break
+        return state, total_reward, terminated, truncated, info
 
 class FrameStackPyTorch(gym.Wrapper):
     def __init__(self, env, num_frames=3):
@@ -30,7 +53,8 @@ class FrameStackPyTorch(gym.Wrapper):
         self.num_frames = num_frames
         self.frames = deque(maxlen=num_frames)
         obs_space = env.observation_space
-        new_shape = (num_frames * obs_space.shape[0], obs_space.shape[1], obs_space.shape[2])
+        # Çerçeveleri kanal boyutunda yığmak için yeni şekli düzenliyoruz.
+        new_shape = (num_frames, obs_space.shape[0], obs_space.shape[1])
         self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=new_shape, dtype=np.float32)
 
     def reset(self, **kwargs):
@@ -46,7 +70,9 @@ class FrameStackPyTorch(gym.Wrapper):
         return self._get_observation(), reward, terminated, truncated, info
 
     def _get_observation(self):
-        return np.concatenate(list(self.frames), axis=0)
+        # Çerçeveleri kanal boyutunda yığıyoruz (axis=0).
+        return np.stack(list(self.frames), axis=0)
+
 
 class ProcessFrame84(gym.ObservationWrapper):
     def __init__(self, env=None):
@@ -67,7 +93,8 @@ class ProcessFrame84(gym.ObservationWrapper):
         img = img[:, :, 0] * 0.299 + img[:, :, 1] * 0.587 + img[:, :, 2] * 0.114
         resized_screen = cv2.resize(img, (84, 110), interpolation=cv2.INTER_AREA)
         x_t = resized_screen[18:102, :]
-        x_t = np.reshape(x_t, [84, 84, 1])
+        x_t = np.reshape(x_t, [84, 84])
+        #x_t = np.reshape(x_t, [84, 84, 1])
         return x_t.astype(np.uint8)
 
 
@@ -105,40 +132,29 @@ class ConvertStateToTensor(gym.Wrapper):
         terminated_tensor = torch.tensor(1 if terminated else 0, dtype=torch.float32).to(device)
         return next_state_tensor, reward_tensor, terminated_tensor, truncated, info
 
-class FrameSkip(gym.Wrapper):
-    def __init__(self, env, skip=3):
-        super(FrameSkip, self).__init__(env)
-        self._obs_buffer = collections.deque(maxlen=2)
-        self.skip = skip
 
-    def step(self, action):
-        total_reward = 0.0
-        terminated = False
-        truncated = False
-        info = {}
-        for _ in range(self.skip):
-            obs, reward, terminated, truncated, info = self.env.step(action)
-            self._obs_buffer.append(obs)
-            total_reward += reward
-            if terminated or truncated:
-                break
-        max_frame = np.max(np.stack(self._obs_buffer), axis=0)
-        return max_frame, total_reward, terminated, truncated, info
+class CompatibleWithPytorchConv3(gym.ObservationWrapper):
+    def __init__(self, env):
+        super(CompatibleWithPytorchConv, self).__init__(env)
+        old_shape = self.observation_space.shape
+        new_shape = (1, old_shape[0], old_shape[1])  # Tek kanala indir
+        self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=new_shape, dtype=np.float32)
 
-    def reset(self, **kwargs):
+    def observation(self, obs):
+        # RGB'yi grayscale'e çevir
+        grayscale_obs = np.dot(obs[...,:3], [0.2989, 0.5870, 0.1140])
         
-        return self.env.reset(**kwargs)
-
-
-def make_env(env_name,render_mode=None):
-    gym.register_envs(ale_py)
-    env = gym.make(env_name,render_mode=render_mode)
-    env = FrameSkip(env) 
+        # Normalize et ve boyut ekle
+        grayscale_obs = grayscale_obs / 255.0
+        grayscale_obs = grayscale_obs[np.newaxis, :, :]  # Boyut ekle
+        
+        return grayscale_obs
+    
+def make_env(env_name, render_mode=None):
+    env = gym.make(env_name, render_mode=render_mode)
+    env = SkipFrame(env)
     env = ProcessFrame84(env)
-    env = FrameStackPyTorch(env)
-    env = CompatibleWithPytorchConv(env)
     env = NormalizeImageData(env)
-    #env = ActionWrapper(env)
-    #env = RewardHandler(env)
-    #env = ConvertStateToTensor(env)
+    env = FrameStackPyTorch(env)
+    #env = CompatibleWithPytorchConv2(env)
     return env

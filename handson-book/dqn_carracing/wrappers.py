@@ -4,31 +4,6 @@ import numpy as np
 import cv2
 from collections import deque
 
-class CompatibleWithPytorchConvOld(gym.ObservationWrapper):
-    def __init__(self, env):
-        super(CompatibleWithPytorchConvOld, self).__init__(env)
-        old_shape = self.observation_space.shape
-        new_shape = (1, old_shape[0], old_shape[1])  # Gri tonlamada tek kanal olacağı için 1 kanal
-        self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=new_shape, dtype=np.float32)
-
-    def observation(self, obs):
-        gray_obs = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
-        # Gri tonlamalı görüntüyü (H, W) boyutunda yaparken (1, H, W) boyutuna getirmek için reshape yapma
-        gray_obs = np.expand_dims(gray_obs, axis=0)
-        gray_obs = gray_obs / 255.0
-        return gray_obs
-
-class CompatibleWithPytorchConv2(gym.ObservationWrapper):
-    def __init__(self, env):
-        super(CompatibleWithPytorchConv2, self).__init__(env)
-        old_shape = self.observation_space.shape
-        new_shape = (old_shape[-1], old_shape[0], old_shape[1])
-        self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=new_shape, dtype=np.float32)
-
-    def observation(self, obs):
-        obs = obs / 255.0
-        return np.moveaxis(obs, 2, 0)
-
 class CompatibleWithPytorchConv(gym.ObservationWrapper):
     def __init__(self, env):
         super(CompatibleWithPytorchConv, self).__init__(env)
