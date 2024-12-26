@@ -6,7 +6,7 @@ env = make_env("CarRacing-v2", render_mode="rgb_array")
 agent = Agent(input =env.observation_space.shape,output=env.action_space.n,learning_rate=0.0005,tensorboard=True,replay_memory=100000,memory_batch_size=32,exploration_decay_rate=0.996,hidden=256,min_epsilon=0.0001,conv_hidden=16,gamma=0.97)
 print(agent.conv)
 print(agent.model)
-
+print(agent.hypernet)
 epochs = 3000
 all_episodes = []
 for episode in range(epochs):

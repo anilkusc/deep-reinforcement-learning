@@ -36,16 +36,47 @@ class Agent(nn.Module):
             ).to(self.device)
         conv_out_size = self._get_conv_out()
 
-        self.model = nn.Sequential(
+        self.model = Sequential(
             Linear(conv_out_size, self.hidden),
             ReLU(),
             Linear(self.hidden, self.output)
         ).to(self.device)
+        
 
-        #self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.optimizer = torch.optim.Adam(list(self.conv.parameters()) + list(self.model.parameters()),lr=self.learning_rate)
+        self.total_params_conv = sum(p.numel() for p in self.conv.parameters())
+        self.total_params_model = sum(p.numel() for p in self.model.parameters())
+
+        hypernet_output = self.total_params_conv + self.total_params_model
+        print(hypernet_output)
+        self.hypernet = Sequential(
+            Linear(1, 128),
+            ReLU(),
+            Linear(128, hypernet_output)
+        ).to(self.device)
+
+        self.optimizer = torch.optim.Adam(self.hypernet.parameters(),lr=self.learning_rate)
         if self.tensorboard:
             self.writer = SummaryWriter(comment="-dqn-carracing")
+    
+    def update_models(self):
+        hypernet_output = self.hypernet(torch.tensor([[1.0]], device=self.device, dtype=torch.float32))
+        hypernet_output = hypernet_output.view(-1)  # Flatten to 1D
+    
+        conv_weights = hypernet_output[:self.total_params_conv]
+        model_weights = hypernet_output[self.total_params_conv:]
+
+        start_idx = 0
+        for param in self.conv.parameters():
+            param_size = param.numel()
+            param.data = conv_weights[start_idx:start_idx + param_size].view(param.shape)
+            start_idx += param_size
+        
+        # Update model layers
+        start_idx = 0
+        for param in self.model.parameters():
+            param_size = param.numel()
+            param.data = model_weights[start_idx:start_idx + param_size].view(param.shape)
+            start_idx += param_size
 
     def compute_loss(self):
         state_batch ,action_batch ,reward_batch ,next_state_batch ,done_batch = self.get_batches()
@@ -60,6 +91,8 @@ class Agent(nn.Module):
         loss = self.compute_loss()
         loss.backward()
         self.optimizer.step()
+        # regenerate models with hypernet
+        self.update_models()
         return loss
     
     def action_selector(self, state):
@@ -123,14 +156,3 @@ class Agent(nn.Module):
         conv_out = self.conv(x)
         conv_out_flattened = conv_out.view(conv_out.size(0), -1)
         return self.model(conv_out_flattened)
-    
-    def target_model_forward(self, x):
-        # Flatten the convolutional output
-        conv_out = self.conv(x)
-        conv_out_flattened = conv_out.view(conv_out.size(0), -1)
-        return self.target_model(conv_out_flattened)
-
-def weight_init(m):
-    if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
-        nn.init.xavier_uniform_(m.weight)
-        m.bias.data.fill_(0.01)
